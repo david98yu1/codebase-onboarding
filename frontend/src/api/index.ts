@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { OverviewResponse } from '../types';
+import type { OverviewResponse, QAResponse } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
@@ -11,5 +11,14 @@ export const uploadAndGetOverview = async (file: File): Promise<OverviewResponse
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 
+  return response.data;
+};
+
+export const askQuestion = async (repoId: string, question: string): Promise<QAResponse> => {
+  const response = await axios.post<QAResponse>(
+    `${API_BASE}/api/qa`,
+    null,
+    { params: { repoId, question } }
+  );
   return response.data;
 };

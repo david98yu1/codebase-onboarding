@@ -1,9 +1,8 @@
 package com.onboarding.controller;
 
+import com.onboarding.model.CodeChunk;
 import com.onboarding.model.OverviewResponse;
-import com.onboarding.service.FileFilterService;
-import com.onboarding.service.SkeletonService;
-import com.onboarding.service.SummaryService;
+import com.onboarding.service.*;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,19 +15,25 @@ import java.util.zip.ZipInputStream;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "*")
 public class OverviewController {
 
     private final FileFilterService fileFilterService;
     private final SkeletonService skeletonService;
     private final SummaryService summaryService;
+    private final ChunkingService chunkingService;
+    private final RepoStore repoStore;
 
     public OverviewController(FileFilterService fileFilterService,
                                SkeletonService skeletonService,
-                               SummaryService summaryService) {
+                               SummaryService summaryService,
+                               ChunkingService chunkingService,
+                               RepoStore repoStore) {
         this.fileFilterService = fileFilterService;
         this.skeletonService = skeletonService;
         this.summaryService = summaryService;
+        this.chunkingService = chunkingService;
+        this.repoStore = repoStore;
     }
 
     @PostMapping("/overview")
@@ -45,24 +50,32 @@ public class OverviewController {
                 }
             }
 
-            // Step 3: Prepare content (full or skeleton)
+            // Step 3: Chunk full files and store for Q&A
+            String repoId = UUID.randomUUID().toString();
+            List<CodeChunk> allChunks = new ArrayList<>();
+            for (Map.Entry<String, String> entry : filteredFiles.entrySet()) {
+                allChunks.addAll(chunkingService.chunk(entry.getKey(), entry.getValue()));
+            }
+            repoStore.save(repoId, allChunks);
+
+            // Step 4: Prepare skeletons for summarization
             Map<String, String> preparedFiles = new LinkedHashMap<>();
             for (Map.Entry<String, String> entry : filteredFiles.entrySet()) {
                 String prepared = skeletonService.prepare(entry.getKey(), entry.getValue());
                 preparedFiles.put(entry.getKey(), prepared);
             }
 
-            // Step 4: Summarize each file
+            // Step 5: Summarize each file
             Map<String, String> fileSummaries = summaryService.summarizeFiles(preparedFiles);
 
-            // Step 5: Group by directory and summarize each group
+            // Step 6: Group by directory and summarize each group
             Map<String, List<Map.Entry<String, String>>> grouped = summaryService.groupByDirectory(fileSummaries);
             Map<String, String> directorySummaries = summaryService.summarizeDirectories(grouped);
 
-            // Step 6: Generate final repo overview
+            // Step 7: Generate final repo overview
             String repoOverview = summaryService.generateRepoOverview(directorySummaries);
 
-            return ResponseEntity.ok(new OverviewResponse(repoOverview, directorySummaries, fileSummaries));
+            return ResponseEntity.ok(new OverviewResponse(repoId, repoOverview, directorySummaries, fileSummaries));
 
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));

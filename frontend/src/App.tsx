@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import UploadSection from './components/UploadSection';
 import OverviewSection from './components/OverviewSection';
+import QASection from './components/QASection';
 import { uploadAndGetOverview } from './api';
 import type { OverviewResponse } from './types';
 import './App.css';
@@ -9,6 +10,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<OverviewResponse | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'qa'>('overview');
 
   const handleUpload = async (file: File) => {
     setLoading(true);
@@ -17,6 +19,7 @@ function App() {
     try {
       const result = await uploadAndGetOverview(file);
       setData(result);
+      setActiveTab('overview');
     } catch (e: any) {
       setError(e.response?.data?.error || e.message || 'Something went wrong');
     } finally {
@@ -47,7 +50,28 @@ function App() {
           </div>
         )}
 
-        {data && <OverviewSection data={data} />}
+        {data && (
+          <>
+            {/* Tab switcher */}
+            <div style={styles.tabs}>
+              <button
+                style={{ ...styles.tab, ...(activeTab === 'overview' ? styles.tabActive : {}) }}
+                onClick={() => setActiveTab('overview')}
+              >
+                🗺️ Overview
+              </button>
+              <button
+                style={{ ...styles.tab, ...(activeTab === 'qa' ? styles.tabActive : {}) }}
+                onClick={() => setActiveTab('qa')}
+              >
+                💬 Ask Questions
+              </button>
+            </div>
+
+            {activeTab === 'overview' && <OverviewSection data={data} />}
+            {activeTab === 'qa' && <QASection repoId={data.repoId} />}
+          </>
+        )}
       </main>
     </div>
   );
@@ -101,6 +125,26 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     width: '100%',
     maxWidth: '600px',
+  },
+  tabs: {
+    display: 'flex',
+    gap: '8px',
+    width: '100%',
+  },
+  tab: {
+    padding: '10px 24px',
+    borderRadius: '8px',
+    border: '2px solid #dde',
+    background: '#fff',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    color: '#666',
+  },
+  tabActive: {
+    backgroundColor: '#4A90E2',
+    borderColor: '#4A90E2',
+    color: '#fff',
   },
 };
 
