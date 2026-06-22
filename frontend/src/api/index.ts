@@ -1,7 +1,9 @@
 import axios from 'axios';
 import type { OverviewResponse, QAResponse } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+// In production, Vercel rewrites /api/* to EC2 backend (avoids mixed content)
+// In development, calls localhost:8080 directly
+const API_BASE = import.meta.env.DEV ? 'http://localhost:8080' : '';
 
 export const uploadAndGetOverview = async (file: File): Promise<OverviewResponse> => {
   const formData = new FormData();
