@@ -3,69 +3,54 @@ package com.onboarding.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.core.SdkBytes;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
-import software.amazon.awssdk.services.bedrockruntime.model.InvokeModelRequest;
-import software.amazon.awssdk.services.bedrockruntime.model.InvokeModelResponse;
 
-import java.util.List;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Map;
 
 @Service
 public class BedrockService {
 
-    private final BedrockRuntimeClient client;
+    private static final String API_URL = "https://4dm65e698a.execute-api.us-west-2.amazonaws.com/prod/invoke";
+    private static final String MODEL    = "claude-sonnet-4.5";
+
+    private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${aws.bedrock.modelId}")
-    private String modelId;
-
-    public BedrockService(
-        @Value("${aws.accessKey}") String accessKey,
-        @Value("${aws.secretKey}") String secretKey,
-        @Value("${aws.region}") String region
-    ) {
-        this.client = BedrockRuntimeClient.builder()
-            .region(Region.of(region))
-            .credentialsProvider(StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(accessKey, secretKey)
-            ))
-            .build();
-    }
+    @Value("${classroom.apiKey}")
+    private String apiKey;
 
     public String invoke(String prompt) {
         try {
             Map<String, Object> body = Map.of(
-                "anthropic_version", "bedrock-2023-05-31",
-                "max_tokens", 1024,
-                "messages", List.of(
-                    Map.of("role", "user", "content", prompt)
-                )
+                "model",     MODEL,
+                "input",     prompt,
+                "maxTokens", 2048
             );
 
             String bodyJson = objectMapper.writeValueAsString(body);
 
-            InvokeModelRequest request = InvokeModelRequest.builder()
-                .modelId(modelId)
-                .contentType("application/json")
-                .accept("application/json")
-                .body(SdkBytes.fromUtf8String(bodyJson))
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL))
+                .header("Content-Type", "application/json")
+                .header("x-api-key", apiKey)
+                .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
                 .build();
 
-            InvokeModelResponse response = client.invokeModel(request);
-            String responseBody = response.body().asUtf8String();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            // Parse response: {"content": [{"text": "..."}]}
-            Map<?, ?> parsed = objectMapper.readValue(responseBody, Map.class);
-            List<?> content = (List<?>) parsed.get("content");
-            Map<?, ?> first = (Map<?, ?>) content.get(0);
-            return (String) first.get("text");
+            if (response.statusCode() != 200) {
+                throw new RuntimeException("API returned status " + response.statusCode() + ": " + response.body());
+            }
+
+            // Response shape: { "output": "..." }
+            Map<?, ?> parsed = objectMapper.readValue(response.body(), Map.class);
+            return (String) parsed.get("output");
 
         } catch (Exception e) {
-            throw new RuntimeException("Bedrock invocation failed: " + e.getMessage(), e);
+            throw new RuntimeException("API invocation failed: " + e.getMessage(), e);
         }
     }
 }
