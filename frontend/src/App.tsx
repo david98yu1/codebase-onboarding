@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import UploadSection from './components/UploadSection';
 import OverviewSection from './components/OverviewSection';
 import QASection from './components/QASection';
+import ProgressSection from './components/ProgressSection';
 import { startOverview, getJobStatus } from './api';
 import type { OverviewResponse } from './types';
 import './App.css';
@@ -71,12 +72,7 @@ function App() {
       <main style={styles.main}>
         <UploadSection onUpload={handleUpload} loading={loading} />
 
-        {loading && (
-          <div style={styles.loadingBox}>
-            <div style={styles.spinner} />
-            <p style={styles.loadingText}>{step}</p>
-          </div>
-        )}
+        {loading && <ProgressSection step={step} />}
 
         {error && (
           <div style={styles.errorBox}>
@@ -133,22 +129,6 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '32px',
     alignItems: 'center',
   },
-  loadingBox: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '16px',
-    padding: '32px',
-  },
-  spinner: {
-    width: '40px',
-    height: '40px',
-    border: '4px solid #d0d9f0',
-    borderTop: '4px solid #4A90E2',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  loadingText: { color: '#555', fontSize: '14px', fontWeight: 500 },
   errorBox: {
     backgroundColor: '#fff0f0',
     border: '1px solid #f5c6cb',
