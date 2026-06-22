@@ -1,28 +1,62 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import UploadSection from './components/UploadSection';
 import OverviewSection from './components/OverviewSection';
 import QASection from './components/QASection';
-import { uploadAndGetOverview } from './api';
+import { startOverview, getJobStatus } from './api';
 import type { OverviewResponse } from './types';
 import './App.css';
 
 function App() {
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<OverviewResponse | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'qa'>('overview');
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  useEffect(() => () => stopPolling(), []);
 
   const handleUpload = async (file: File) => {
     setLoading(true);
     setError(null);
     setData(null);
+    setStep('Uploading...');
+
     try {
-      const result = await uploadAndGetOverview(file);
-      setData(result);
-      setActiveTab('overview');
+      const jobId = await startOverview(file);
+
+      // Poll every 3 seconds
+      pollRef.current = setInterval(async () => {
+        try {
+          const status = await getJobStatus(jobId);
+          setStep(status.step);
+
+          if (status.status === 'DONE' && status.result) {
+            stopPolling();
+            setData(status.result);
+            setLoading(false);
+            setActiveTab('overview');
+          } else if (status.status === 'FAILED') {
+            stopPolling();
+            setError(status.error || 'Analysis failed');
+            setLoading(false);
+          }
+        } catch (e: any) {
+          stopPolling();
+          setError('Lost connection to server');
+          setLoading(false);
+        }
+      }, 3000);
+
     } catch (e: any) {
-      setError(e.response?.data?.error || e.message || 'Something went wrong');
-    } finally {
+      setError(e.response?.data?.error || e.message || 'Upload failed');
       setLoading(false);
     }
   };
@@ -40,7 +74,7 @@ function App() {
         {loading && (
           <div style={styles.loadingBox}>
             <div style={styles.spinner} />
-            <p style={styles.loadingText}>Analyzing your repository... this may take a moment</p>
+            <p style={styles.loadingText}>{step}</p>
           </div>
         )}
 
@@ -52,7 +86,6 @@ function App() {
 
         {data && (
           <>
-            {/* Tab switcher */}
             <div style={styles.tabs}>
               <button
                 style={{ ...styles.tab, ...(activeTab === 'overview' ? styles.tabActive : {}) }}
@@ -115,7 +148,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
-  loadingText: { color: '#555', fontSize: '14px' },
+  loadingText: { color: '#555', fontSize: '14px', fontWeight: 500 },
   errorBox: {
     backgroundColor: '#fff0f0',
     border: '1px solid #f5c6cb',
